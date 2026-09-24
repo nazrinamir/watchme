@@ -13,6 +13,8 @@ function createSql() {
     ssl: "require",
     max: 1,
     connect_timeout: 15,
+    // Transaction pooler (port 6543) does not support prepared statements.
+    prepare: false,
   });
 }
 
