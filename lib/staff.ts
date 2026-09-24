@@ -39,6 +39,17 @@ function assertOk(error: { message: string } | null) {
   }
 }
 
+function unwrap<T>(result: {
+  data: T | null;
+  error: { message: string } | null;
+}) {
+  assertOk(result.error);
+  if (result.data === null) {
+    throw new Error("Expected a row");
+  }
+  return result.data;
+}
+
 function toStaff(row: StaffDb): Staff {
   return {
     id: Number(row.id),
@@ -151,12 +162,9 @@ export async function updateStaffStatus(
     .select("id, name, status, status_until")
     .eq("id", id)
     .single();
-  assertOk(previous.error);
-
-  const fromStatus = previous.data?.status ?? null;
-  const until = previous.data?.status_until
-    ? new Date(previous.data.status_until)
-    : null;
+  const before = unwrap(previous);
+  const fromStatus = before.status ?? null;
+  const until = before.status_until ? new Date(before.status_until) : null;
   const endedEarly =
     (fromStatus === "toilet" || fromStatus === "solat" || fromStatus === "afk") &&
     (status === "focus" || status === "do_not_disturb") &&
@@ -178,16 +186,16 @@ export async function updateStaffStatus(
     .eq("id", id)
     .select("id, name, status, status_minutes, return_status")
     .single();
-  assertOk(updated.error);
+  const saved = unwrap(updated);
 
   const logged = await supabase.from("status_log").insert({
     staff_id: id,
-    staff_name: updated.data.name,
-    status: updated.data.status,
-    status_minutes: updated.data.status_minutes,
+    staff_name: saved.name,
+    status: saved.status,
+    status_minutes: saved.status_minutes,
     event: endedEarly ? "ended" : "set",
     from_status: endedEarly ? fromStatus : null,
-    return_status: updated.data.return_status,
+    return_status: saved.return_status,
   });
   assertOk(logged.error);
 }
@@ -199,11 +207,11 @@ export async function incrementPing(id: number) {
     .select("ping_count")
     .eq("id", id)
     .single();
-  assertOk(current.error);
+  const row = unwrap(current);
 
   const updated = await supabase
     .from("staff")
-    .update({ ping_count: Number(current.data.ping_count) + 1 })
+    .update({ ping_count: Number(row.ping_count) + 1 })
     .eq("id", id);
   assertOk(updated.error);
 }
@@ -215,16 +223,16 @@ export async function updateCurrentNote(id: number, note: string) {
     .select("current_note")
     .eq("id", id)
     .single();
-  assertOk(current.error);
+  const row = unwrap(current);
 
-  if (current.data.current_note === note) {
+  if (row.current_note === note) {
     return;
   }
 
   const updated = await supabase
     .from("staff")
     .update({
-      previous_note: current.data.current_note,
+      previous_note: row.current_note,
       current_note: note,
       updated_at: new Date().toISOString(),
     })
