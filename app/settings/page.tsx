@@ -3,6 +3,8 @@ import { ClearDataForm } from "@/app/settings/clear-data-form";
 import { LunchForm } from "@/app/settings/lunch-form";
 import { getLunchSchedule } from "@/lib/lunch";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Settings",
 };
