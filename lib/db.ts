@@ -12,7 +12,7 @@ function createSql() {
   return postgres(url, {
     ssl: "require",
     max: 1,
-    connect_timeout: 15,
+    connect_timeout: 8,
     // Transaction pooler (port 6543) does not support prepared statements.
     prepare: false,
   });
