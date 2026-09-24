@@ -8,6 +8,7 @@ import {
   isStatusMinutes,
   isTimedStatus,
 } from "@/lib/staff-status";
+import { isClock, saveLunchSchedule } from "@/lib/lunch";
 import {
   clearOperationalData,
   expireDueStatuses,
@@ -21,6 +22,8 @@ import {
 export type AddStaffState = { error: string } | null;
 
 export type ClearDataState = { error: string } | { cleared: true } | null;
+
+export type LunchHoursState = { error: string } | { saved: true } | null;
 
 const CLEAR_DATA_PASSWORD = "pinksnake";
 
@@ -46,6 +49,26 @@ export async function clearData(
   revalidatePath("/");
   revalidatePath("/log");
   return { cleared: true };
+}
+
+export async function saveLunchHours(
+  _state: LunchHoursState,
+  formData: FormData,
+): Promise<LunchHoursState> {
+  const start = String(formData.get("start") ?? "").slice(0, 5);
+  const end = String(formData.get("end") ?? "").slice(0, 5);
+
+  if (!isClock(start) || !isClock(end)) {
+    return { error: "Enter a start and end time." };
+  }
+
+  if (start === end) {
+    return { error: "Start and end must be different." };
+  }
+
+  await saveLunchSchedule(start, end);
+  revalidatePath("/settings");
+  return { saved: true };
 }
 
 export async function refreshStaff() {

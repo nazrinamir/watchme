@@ -27,6 +27,29 @@ dialog::backdrop {
   background: rgb(0 0 0 / 0.5);
 }
 
+.lunch-break {
+  animation: lunch-float 3.2s ease-in-out infinite;
+}
+
+@keyframes lunch-float {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.72;
+  }
+
+  50% {
+    transform: translateY(-12px);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lunch-break {
+    animation: none;
+  }
+}
+
 .note-reveal {
   display: grid;
   grid-template-rows: 0fr;

@@ -119,3 +119,14 @@ revoke all on function public.apply_daily_reset() from public, anon, authenticat
 alter table public.app_reset enable row level security;
 
 revoke all on table public.app_reset from anon, authenticated, service_role;
+
+create table public.lunch_schedule (
+  id integer primary key default 1 check (id = 1),
+  start_time time not null default time '13:00',
+  end_time time not null default time '14:00',
+  constraint lunch_schedule_window_check check (start_time <> end_time)
+);
+
+alter table public.lunch_schedule enable row level security;
+
+revoke all on table public.lunch_schedule from anon, authenticated, service_role;

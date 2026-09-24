@@ -7,7 +7,7 @@ import {
   statusLogMessage,
   type StatusLog,
 } from "@/lib/status-log";
-import { STAFF_STATUS_EMOJI } from "@/lib/staff-status";
+import { STAFF_STATUS_EMOJI, isTimedStatus, type StaffStatus } from "@/lib/staff-status";
 
 export const dynamic = "force-dynamic";
 
@@ -69,20 +69,41 @@ export default async function StatusLogPage() {
   );
 }
 
+const statusWash: Record<StaffStatus, string> = {
+  focus:
+    "bg-[linear-gradient(to_top,rgb(4_120_87/0.45),transparent)] dark:bg-[linear-gradient(to_top,rgb(16_185_129/0.4),transparent)]",
+  do_not_disturb:
+    "bg-[linear-gradient(to_top,rgb(190_18_60/0.4),transparent)] dark:bg-[linear-gradient(to_top,rgb(244_63_94/0.4),transparent)]",
+  toilet:
+    "bg-[linear-gradient(to_top,rgb(217_119_6/0.45),transparent)] dark:bg-[linear-gradient(to_top,rgb(251_191_36/0.35),transparent)]",
+  solat:
+    "bg-[linear-gradient(to_top,rgb(3_105_161/0.4),transparent)] dark:bg-[linear-gradient(to_top,rgb(56_189_248/0.35),transparent)]",
+  afk: "bg-[linear-gradient(to_top,rgb(87_83_78/0.4),transparent)] dark:bg-[linear-gradient(to_top,rgb(168_162_158/0.35),transparent)]",
+};
+
 function LogMessage({ entry }: { entry: StatusLog }) {
-  const emoji =
+  const colorStatus =
     entry.event === "expired" || entry.event === "ended"
-      ? entry.fromStatus
-        ? STAFF_STATUS_EMOJI[entry.fromStatus]
-        : STAFF_STATUS_EMOJI[entry.status]
-      : STAFF_STATUS_EMOJI[entry.status];
+      ? (entry.fromStatus ?? entry.status)
+      : entry.status;
+  const timerStarted =
+    entry.event === "set" &&
+    isTimedStatus(entry.status) &&
+    entry.statusMinutes !== null;
+  const emoji = entry.event === "expired"
+    ? "⏰"
+    : timerStarted
+      ? "⏳"
+      : STAFF_STATUS_EMOJI[colorStatus];
 
   return (
-    <article className="flex gap-3 rounded-2xl border border-stone-200 bg-white px-4 py-3 dark:border-stone-800 dark:bg-stone-900">
+    <article
+      className={`flex gap-3 overflow-hidden rounded-2xl border border-stone-200 bg-white px-4 py-3 dark:border-stone-800 dark:bg-stone-900 ${statusWash[colorStatus]}`}
+    >
       <span className="text-xl leading-6" aria-hidden>
         {emoji}
       </span>
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="text-sm leading-6">{statusLogMessage(entry)}</p>
         <p className="mt-1 text-xs text-stone-500">
           <LocalTime at={entry.createdAt} />

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { pingStaff, setCurrentNote, setStaffStatus } from "@/app/actions";
+import { formatTimeAgo, useNow } from "@/components/local-time";
 import { StatusCountdown } from "@/components/status-countdown";
 import { SubmitButton } from "@/components/submit-button";
 import {
@@ -41,6 +42,18 @@ const statusClass: Record<StaffStatus, string> = {
 
 const idleStatusClass =
   "border border-stone-300 text-stone-700 dark:border-stone-700 dark:text-stone-300";
+
+const statusWash: Record<StaffStatus, string> = {
+  focus:
+    "bg-[linear-gradient(to_top,rgb(4_120_87/0.45),transparent)] dark:bg-[linear-gradient(to_top,rgb(16_185_129/0.4),transparent)]",
+  do_not_disturb:
+    "bg-[linear-gradient(to_top,rgb(190_18_60/0.4),transparent)] dark:bg-[linear-gradient(to_top,rgb(244_63_94/0.4),transparent)]",
+  toilet:
+    "bg-[linear-gradient(to_top,rgb(217_119_6/0.45),transparent)] dark:bg-[linear-gradient(to_top,rgb(251_191_36/0.35),transparent)]",
+  solat:
+    "bg-[linear-gradient(to_top,rgb(3_105_161/0.4),transparent)] dark:bg-[linear-gradient(to_top,rgb(56_189_248/0.35),transparent)]",
+  afk: "bg-[linear-gradient(to_top,rgb(87_83_78/0.4),transparent)] dark:bg-[linear-gradient(to_top,rgb(168_162_158/0.35),transparent)]",
+};
 
 export function StaffBoard({ staff }: { staff: StaffView[] }) {
   const [openId, setOpenId] = useState<number | null>(null);
@@ -427,6 +440,7 @@ function LastUpdate({
   at: string;
   withLabel?: boolean;
 }) {
+  const now = useNow();
   const date = new Date(at);
   const label = new Intl.DateTimeFormat(undefined, {
     month: "short",
@@ -434,6 +448,7 @@ function LastUpdate({
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
+  const ago = formatTimeAgo(at, now);
 
   return (
     <time
@@ -442,6 +457,7 @@ function LastUpdate({
       className="block text-xs font-normal text-stone-500"
     >
       {withLabel ? `Updated ${label}` : label}
+      <span className="text-stone-400"> · {ago}</span>
     </time>
   );
 }
@@ -491,7 +507,9 @@ function StaffCards({
         return (
           <li
             key={person.id}
-            className="flex flex-col gap-3 rounded-2xl border border-stone-200 p-3 dark:border-stone-800"
+            className={`flex flex-col gap-3 overflow-hidden rounded-2xl border border-stone-200 p-3 dark:border-stone-800 ${
+              person.status ? statusWash[person.status] : ""
+            }`}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 flex-col gap-1">
@@ -563,7 +581,9 @@ function StaffTable({
               return (
                 <tr
                   key={person.id}
-                  className="border-t border-stone-200 align-top dark:border-stone-800"
+                  className={`border-t border-stone-200 align-top dark:border-stone-800 ${
+                    person.status ? statusWash[person.status] : ""
+                  }`}
                 >
                   <td className="px-4 py-4">
                     <StaffName person={person} open={open} onOpen={onOpen} />
