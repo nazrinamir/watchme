@@ -1,5 +1,5 @@
 import "server-only";
-import { sql } from "@/lib/db";
+import { createClient } from "@/lib/db";
 import {
   isReturnStatus,
   isStaffStatus,
@@ -20,127 +20,123 @@ export type Staff = {
   updatedAt: string;
 };
 
-type StaffRow = {
-  id: string | number;
+type StaffDb = {
+  id: number;
   name: string;
   status: string | null;
-  statusMinutes: number | null;
-  statusUntil: string | Date | null;
-  returnStatus: string | null;
-  currentNote: string;
-  previousNote: string;
-  pingCount: number;
-  updatedAt: string | Date;
+  status_minutes: number | null;
+  status_until: string | null;
+  return_status: string | null;
+  current_note: string;
+  previous_note: string;
+  ping_count: number;
+  updated_at: string;
 };
 
-function toStaff(row: StaffRow): Staff {
-  const updatedAt =
-    row.updatedAt instanceof Date
-      ? row.updatedAt.toISOString()
-      : new Date(row.updatedAt).toISOString();
+function assertOk(error: { message: string } | null) {
+  if (error) {
+    throw error;
+  }
+}
 
+function toStaff(row: StaffDb): Staff {
   return {
     id: Number(row.id),
     name: row.name,
     status: row.status && isStaffStatus(row.status) ? row.status : null,
     statusMinutes:
-      row.statusMinutes === null ? null : Number(row.statusMinutes),
-    statusUntil:
-      row.statusUntil === null
-        ? null
-        : row.statusUntil instanceof Date
-          ? row.statusUntil.toISOString()
-          : new Date(row.statusUntil).toISOString(),
+      row.status_minutes === null ? null : Number(row.status_minutes),
+    statusUntil: row.status_until,
     returnStatus:
-      row.returnStatus && isReturnStatus(row.returnStatus)
-        ? row.returnStatus
+      row.return_status && isReturnStatus(row.return_status)
+        ? row.return_status
         : null,
-    currentNote: row.currentNote,
-    previousNote: row.previousNote,
-    pingCount: Number(row.pingCount),
-    updatedAt,
+    currentNote: row.current_note,
+    previousNote: row.previous_note,
+    pingCount: Number(row.ping_count),
+    updatedAt: row.updated_at,
   };
 }
 
+const staffColumns =
+  "id, name, status, status_minutes, status_until, return_status, current_note, previous_note, ping_count, updated_at";
+
 export async function listStaff(): Promise<Staff[]> {
   await expireDueStatuses();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("staff")
+    .select(staffColumns)
+    .order("name");
 
-  const rows = await sql<StaffRow[]>`
-    select
-      id,
-      name,
-      status,
-      status_minutes as "statusMinutes",
-      status_until as "statusUntil",
-      return_status as "returnStatus",
-      current_note as "currentNote",
-      previous_note as "previousNote",
-      ping_count as "pingCount",
-      updated_at as "updatedAt"
-    from staff
-    order by lower(name), id
-  `;
-
-  return rows.map(toStaff);
+  assertOk(error);
+  return (data ?? []).map((row) => toStaff(row as StaffDb));
 }
 
 export async function clearOperationalData() {
-  await sql`
-    update staff
-    set
-      status = null,
-      status_minutes = null,
-      status_until = null,
-      return_status = null,
-      ping_count = 0,
-      current_note = '',
-      previous_note = ''
-  `;
-  await sql`delete from status_log`;
+  const supabase = await createClient();
+  const cleared = await supabase
+    .from("staff")
+    .update({
+      status: null,
+      status_minutes: null,
+      status_until: null,
+      return_status: null,
+      ping_count: 0,
+      current_note: "",
+      previous_note: "",
+    })
+    .gte("id", 1);
+  assertOk(cleared.error);
+
+  const deleted = await supabase.from("status_log").delete().gte("id", 1);
+  assertOk(deleted.error);
 }
 
 export async function insertStaff(name: string) {
-  await sql`insert into staff (name) values (${name})`;
+  const supabase = await createClient();
+  const { error } = await supabase.from("staff").insert({ name });
+  assertOk(error);
 }
 
 export async function expireDueStatuses() {
-  await sql`select apply_daily_reset()`;
+  const supabase = await createClient();
+  const reset = await supabase.rpc("apply_daily_reset");
+  assertOk(reset.error);
 
-  await sql`
-    with due as (
-      select
-        id,
-        name,
-        status as from_status,
-        coalesce(return_status, 'focus') as return_status
-      from staff
-      where status in ('toilet', 'solat', 'afk')
-        and status_until is not null
-        and status_until <= now()
-    ),
-    updated as (
-      update staff as person
-      set
-        status = due.return_status,
-        status_minutes = null,
-        status_until = null,
-        return_status = null,
-        updated_at = now()
-      from due
-      where person.id = due.id
-      returning person.id, due.name, due.from_status, person.status
-    )
-    insert into status_log (
-      staff_id,
-      staff_name,
-      status,
-      event,
-      from_status,
-      return_status
-    )
-    select id, name, status, 'expired', from_status, status
-    from updated
-  `;
+  const due = await supabase
+    .from("staff")
+    .select("id, name, status, return_status")
+    .in("status", ["toilet", "solat", "afk"])
+    .lte("status_until", new Date().toISOString())
+    .not("status_until", "is", null);
+  assertOk(due.error);
+
+  for (const row of due.data ?? []) {
+    const returnStatus =
+      row.return_status === "do_not_disturb" ? "do_not_disturb" : "focus";
+    const updated = await supabase
+      .from("staff")
+      .update({
+        status: returnStatus,
+        status_minutes: null,
+        status_until: null,
+        return_status: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", row.id);
+    assertOk(updated.error);
+
+    const logged = await supabase.from("status_log").insert({
+      staff_id: row.id,
+      staff_name: row.name,
+      status: returnStatus,
+      event: "expired",
+      from_status: row.status,
+      return_status: returnStatus,
+    });
+    assertOk(logged.error);
+  }
 }
 
 export async function updateStaffStatus(
@@ -149,78 +145,91 @@ export async function updateStaffStatus(
   statusMinutes: number | null,
   returnStatus: ReturnStatus | null,
 ) {
-  await sql`
-    with previous as (
-      select id, status as from_status, status_until
-      from staff
-      where id = ${id}
-    ),
-    updated as (
-      update staff
-      set
-        status = ${status},
-        status_minutes = ${statusMinutes},
-        status_until = case
-          when ${statusMinutes}::integer is null then null
-          else now() + make_interval(mins => ${statusMinutes}::integer)
-        end,
-        return_status = ${returnStatus},
-        updated_at = now()
-      where id = ${id}
-      returning id, name, status, status_minutes, return_status
-    )
-    insert into status_log (
-      staff_id,
-      staff_name,
+  const supabase = await createClient();
+  const previous = await supabase
+    .from("staff")
+    .select("id, name, status, status_until")
+    .eq("id", id)
+    .single();
+  assertOk(previous.error);
+
+  const fromStatus = previous.data?.status ?? null;
+  const until = previous.data?.status_until
+    ? new Date(previous.data.status_until)
+    : null;
+  const endedEarly =
+    (fromStatus === "toilet" || fromStatus === "solat" || fromStatus === "afk") &&
+    (status === "focus" || status === "do_not_disturb") &&
+    until !== null &&
+    until.getTime() > Date.now();
+
+  const updated = await supabase
+    .from("staff")
+    .update({
       status,
-      status_minutes,
-      event,
-      from_status,
-      return_status
-    )
-    select
-      updated.id,
-      updated.name,
-      updated.status,
-      updated.status_minutes,
-      case
-        when previous.from_status in ('toilet', 'solat', 'afk')
-          and updated.status in ('focus', 'do_not_disturb')
-          and previous.status_until is not null
-          and previous.status_until > now()
-        then 'ended'
-        else 'set'
-      end,
-      case
-        when previous.from_status in ('toilet', 'solat', 'afk')
-          and updated.status in ('focus', 'do_not_disturb')
-        then previous.from_status
-        else null
-      end,
-      updated.return_status
-    from updated
-    join previous on previous.id = updated.id
-  `;
+      status_minutes: statusMinutes,
+      status_until:
+        statusMinutes === null
+          ? null
+          : new Date(Date.now() + statusMinutes * 60_000).toISOString(),
+      return_status: returnStatus,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select("id, name, status, status_minutes, return_status")
+    .single();
+  assertOk(updated.error);
+
+  const logged = await supabase.from("status_log").insert({
+    staff_id: id,
+    staff_name: updated.data.name,
+    status: updated.data.status,
+    status_minutes: updated.data.status_minutes,
+    event: endedEarly ? "ended" : "set",
+    from_status: endedEarly ? fromStatus : null,
+    return_status: updated.data.return_status,
+  });
+  assertOk(logged.error);
 }
 
 export async function incrementPing(id: number) {
-  await sql`
-    update staff
-    set ping_count = ping_count + 1
-    where id = ${id}
-  `;
+  const supabase = await createClient();
+  const current = await supabase
+    .from("staff")
+    .select("ping_count")
+    .eq("id", id)
+    .single();
+  assertOk(current.error);
+
+  const updated = await supabase
+    .from("staff")
+    .update({ ping_count: Number(current.data.ping_count) + 1 })
+    .eq("id", id);
+  assertOk(updated.error);
 }
 
 export async function updateCurrentNote(id: number, note: string) {
-  await sql`
-    update staff
-    set
-      previous_note = current_note,
-      current_note = ${note},
-      updated_at = now()
-    where id = ${id}
-      and current_note is distinct from ${note}
-  `;
+  const supabase = await createClient();
+  const current = await supabase
+    .from("staff")
+    .select("current_note")
+    .eq("id", id)
+    .single();
+  assertOk(current.error);
+
+  if (current.data.current_note === note) {
+    return;
+  }
+
+  const updated = await supabase
+    .from("staff")
+    .update({
+      previous_note: current.data.current_note,
+      current_note: note,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  assertOk(updated.error);
 }
 
 export function isUniqueViolation(error: unknown) {

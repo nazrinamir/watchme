@@ -1,5 +1,5 @@
 import "server-only";
-import { sql } from "@/lib/db";
+import { createClient } from "@/lib/db";
 
 export type LunchSchedule = {
   start: string;
@@ -55,18 +55,22 @@ function malaysiaClock(date = new Date()) {
 }
 
 export async function getLunchSchedule(): Promise<LunchSchedule> {
-  const rows = await sql<{ startTime: string | Date; endTime: string | Date }[]>`
-    select start_time as "startTime", end_time as "endTime"
-    from lunch_schedule
-    where id = 1
-  `;
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("lunch_schedule")
+    .select("start_time, end_time")
+    .eq("id", 1)
+    .maybeSingle();
 
-  const row = rows[0];
-  if (!row) {
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
     return { start: "13:00", end: "14:00" };
   }
 
-  return { start: toClock(row.startTime), end: toClock(row.endTime) };
+  return { start: toClock(data.start_time), end: toClock(data.end_time) };
 }
 
 export async function isLunchBreakNow() {
@@ -75,10 +79,14 @@ export async function isLunchBreakNow() {
 }
 
 export async function saveLunchSchedule(start: string, end: string) {
-  await sql`
-    insert into lunch_schedule (id, start_time, end_time)
-    values (1, ${start}::time, ${end}::time)
-    on conflict (id) do update
-    set start_time = excluded.start_time, end_time = excluded.end_time
-  `;
+  const supabase = await createClient();
+  const { error } = await supabase.from("lunch_schedule").upsert({
+    id: 1,
+    start_time: start,
+    end_time: end,
+  });
+
+  if (error) {
+    throw error;
+  }
 }

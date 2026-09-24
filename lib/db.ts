@@ -1,25 +1,33 @@
 import "server-only";
-import postgres from "postgres";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 
-const globalForDb = globalThis as unknown as { sql?: ReturnType<typeof postgres> };
+export async function createClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
-function createSql() {
-  const url = process.env.DATABASE_URL;
-  if (!url) {
-    throw new Error("DATABASE_URL is not set");
+  if (!url || !key) {
+    throw new Error(
+      "Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+    );
   }
 
-  return postgres(url, {
-    ssl: "require",
-    max: 1,
-    connect_timeout: 8,
-    // Transaction pooler (port 6543) does not support prepared statements.
-    prepare: false,
+  const cookieStore = await cookies();
+
+  return createServerClient(url, key, {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll();
+      },
+      setAll(cookiesToSet) {
+        try {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options),
+          );
+        } catch {
+          // Server Components cannot always write cookies.
+        }
+      },
+    },
   });
-}
-
-export const sql = globalForDb.sql ?? createSql();
-
-if (process.env.NODE_ENV !== "production") {
-  globalForDb.sql = sql;
 }

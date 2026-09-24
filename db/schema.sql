@@ -130,3 +130,23 @@ create table public.lunch_schedule (
 alter table public.lunch_schedule enable row level security;
 
 revoke all on table public.lunch_schedule from anon, authenticated, service_role;
+
+grant select, insert, update, delete on public.staff to anon, authenticated;
+grant select, insert, update, delete on public.status_log to anon, authenticated;
+grant select, insert, update, delete on public.lunch_schedule to anon, authenticated;
+grant execute on function public.apply_daily_reset() to anon, authenticated;
+
+create policy staff_api on public.staff
+for all to anon, authenticated
+using (true)
+with check (true);
+
+create policy status_log_api on public.status_log
+for all to anon, authenticated
+using (true)
+with check (true);
+
+create policy lunch_schedule_api on public.lunch_schedule
+for all to anon, authenticated
+using (true)
+with check (true);

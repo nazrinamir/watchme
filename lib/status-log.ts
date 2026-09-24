@@ -1,5 +1,5 @@
 import "server-only";
-import { sql } from "@/lib/db";
+import { createClient } from "@/lib/db";
 import { expireDueStatuses } from "@/lib/staff";
 import {
   STAFF_STATUS_LABELS,
@@ -89,24 +89,30 @@ export function statusLogMessage(entry: StatusLog) {
 
 export async function listStatusLogs(): Promise<StatusLog[]> {
   await expireDueStatuses();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("status_log")
+    .select(
+      "id, staff_name, status, status_minutes, event, from_status, return_status, created_at",
+    )
+    .order("created_at", { ascending: false })
+    .limit(200);
 
-  const rows = await sql<StatusLogRow[]>`
-    select
-      id,
-      staff_name as "staffName",
-      status,
-      status_minutes as "statusMinutes",
-      event,
-      from_status as "fromStatus",
-      return_status as "returnStatus",
-      created_at as "createdAt"
-    from status_log
-    order by created_at desc, id desc
-    limit 200
-  `;
+  if (error) {
+    throw error;
+  }
 
-  return rows.flatMap((row) => {
-    const entry = toStatusLog(row);
+  return (data ?? []).flatMap((row) => {
+    const entry = toStatusLog({
+      id: row.id,
+      staffName: row.staff_name,
+      status: row.status,
+      statusMinutes: row.status_minutes,
+      event: row.event,
+      fromStatus: row.from_status,
+      returnStatus: row.return_status,
+      createdAt: row.created_at,
+    });
     return entry ? [entry] : [];
   });
 }
