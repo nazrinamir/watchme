@@ -20,7 +20,49 @@
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), sans-serif;
+}
+
+dialog::backdrop {
+  background: rgb(0 0 0 / 0.5);
+}
+
+.note-reveal {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 240ms ease,
+    opacity 180ms ease;
+}
+
+.note-reveal[data-open="true"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.note-reveal-inner {
+  overflow: hidden;
+}
+
+.note-reveal[data-open="true"] .note-reveal-inner > * {
+  animation: note-rise 240ms ease;
+}
+
+@keyframes note-rise {
+  from {
+    transform: translateY(-6px);
+  }
+
+  to {
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .note-reveal,
+  .note-reveal[data-open="true"] .note-reveal-inner > * {
+    transition: none;
+    animation: none;
+  }
 }
